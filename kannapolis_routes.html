@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kannapolis Travel Routes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root { --bg:#ffffff; --fg:#1b1f24; --muted:#5b6470; --panel:#ffffffee; --border:#d0d7de; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --fg:#e6edf3; --muted:#9aa4af; --panel:#161b22ee; --border:#30363d; }
+  }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+               font:14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #map { position:absolute; inset:0; }
+  .panel { position:absolute; z-index:1000; top:12px; left:12px; max-width:300px;
+           max-height:calc(100% - 24px); overflow:auto; background:var(--panel);
+           border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+           box-shadow:0 4px 16px #0003; }
+  .panel h1 { font-size:16px; margin:0 0 4px; }
+  .panel p { margin:0 0 10px; color:var(--muted); font-size:12px; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+              color:var(--muted); margin:12px 0 6px; }
+  .row { display:flex; align-items:center; gap:8px; margin:4px 0; cursor:pointer; }
+  .swatch { width:26px; height:0; border-top:4px solid; flex:none; }
+  .swatch.dash { border-top-style:dashed; }
+  .count { margin-left:auto; color:var(--muted); font-size:12px; }
+  .key { font-size:12px; color:var(--muted); margin-top:10px; border-top:1px solid var(--border); padding-top:8px; }
+  .leaflet-tooltip.code { font-weight:600; }
+  @media (max-width: 600px) {
+    .panel { top:auto; bottom:12px; left:16px; right:16px; max-width:none; max-height:40%; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel" id="panel">
+  <h1>Trains &amp; Planes from Kannapolis</h1>
+  <p>Amtrak KAN &middot; Concord-Padgett (USA). Click lines and dots for details.</p>
+  <h2>Rail</h2><div id="rail-list"></div>
+  <h2>Air (nonstop from USA)</h2><div id="air-list"></div>
+  <div class="key">
+    Solid rail = boards at Kannapolis &middot; Dashed rail = transfer required<br>
+    <span id="footer"></span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const DATA = {
+ "origins": {
+  "KAN": {
+   "name": "Kannapolis Amtrak (KAN)",
+   "lat": 35.496172,
+   "lon": -80.624928
+  },
+  "USA": {
+   "name": "Concord-Padgett Regional Airport (USA)",
+   "lat": 35.387798,
+   "lon": -80.709099
+  }
+ },
+ "stations": {
+  "ALX": {
+   "name": "Alexandria",
+   "lat": 38.806503,
+   "lon": -77.06233
+  },
+  "ATL": {
+   "name": "Atlanta",
+   "lat": 33.799445,
+   "lon": -84.392477
+  },
+  "ATN": {
+   "name": "Anniston",
+   "lat": 33.649112,
+   "lon": -85.832145
+  },
+  "BAL": {
+   "name": "Baltimore",
+   "lat": 39.307302,
+   "lon": -76.615688
+  },
+  "BHM": {
+   "name": "Birmingham",
+   "lat": 33.512937,
+   "lon": -86.807023
+  },
+  "BNC": {
+   "name": "Burlington",
+   "lat": 36.094225,
+   "lon": -79.434531
+  },
+  "BWI": {
+   "name": "BWI Airport",
+   "lat": 39.192362,
+   "lon": -76.6943
+  },
+  "CHS": {
+   "name": "Charleston",
+   "lat": 32.875473,
+   "lon": -79.998048
+  },
+  "CLT": {
+   "name": "Charlotte",
+   "lat": 35.241403,
+   "lon": -80.822812
+  },
+  "CSN": {
+   "name": "Clemson",
+   "lat": 34.691115,
+   "lon": -82.832501
+  },
+  "CYN": {
+   "name": "Cary",
+   "lat": 35.788294,
+   "lon": -78.782246
+  },
+  "DFB": {
+   "name": "Deerfield Beach",
+   "lat": 26.317069,
+   "lon": -80.122147
+  },
+  "DLB": {
+   "name": "Delray Beach",
+   "lat": 26.454021,
+   "lon": -80.091154
+  },
+  "DLD": {
+   "name": "DeLand",
+   "lat": 29.017849,
+   "lon": -81.352477
+  },
+  "DNC": {
+   "name": "Durham",
+   "lat": 35.997347,
+   "lon": -78.906299
+  },
+  "FAY": {
+   "name": "Fayetteville",
+   "lat": 35.054993,
+   "lon": -78.884788
+  },
+  "FLO": {
+   "name": "Florence",
+   "lat": 34.199157,
+   "lon": -79.757056
+  },
+  "FTL": {
+   "name": "Fort Lauderdale",
+   "lat": 26.119256,
+   "lon": -80.17
+  },
+  "GAS": {
+   "name": "Gastonia",
+   "lat": 35.269186,
+   "lon": -81.162366
+  },
+  "GNS": {
+   "name": "Gainesville",
+   "lat": 34.288897,
+   "lon": -83.819694
+  },
+  "GRO": {
+   "name": "Greensboro",
+   "lat": 36.069797,
+   "lon": -79.78708
+  },
+  "GRV": {
+   "name": "Greenville",
+   "lat": 34.858256,
+   "lon": -82.413486
+  },
+  "HBG": {
+   "name": "Hattiesburg",
+   "lat": 31.326921,
+   "lon": -89.286463
+  },
+  "HOL": {
+   "name": "Hollywood",
+   "lat": 26.011641,
+   "lon": -80.167884
+  },
+  "HPT": {
+   "name": "High Point",
+   "lat": 35.957128,
+   "lon": -80.006097
+  },
+  "JAX": {
+   "name": "Jacksonville",
+   "lat": 30.365601,
+   "lon": -81.723893
+  },
+  "JSP": {
+   "name": "Jesup",
+   "lat": 31.605589,
+   "lon": -81.882173
+  },
+  "KAN": {
+   "name": "Kannapolis",
+   "lat": 35.496172,
+   "lon": -80.624928
+  },
+  "KIS": {
+   "name": "Kissimmee",
+   "lat": 28.293835,
+   "lon": -81.404234
+  },
+  "KTR": {
+   "name": "Kingstree",
+   "lat": 33.663882,
+   "lon": -79.829026
+  },
+  "LAU": {
+   "name": "Laurel",
+   "lat": 31.692168,
+   "lon": -89.127933
+  },
+  "MEI": {
+   "name": "Meridian",
+   "lat": 32.364166,
+   "lon": -88.696568
+  },
+  "MET": {
+   "name": "Metropark",
+   "lat": 40.568056,
+   "lon": -74.329583
+  },
+  "MIA": {
+   "name": "Miami",
+   "lat": 25.849554,
+   "lon": -80.257759
+  },
+  "NOL": {
+   "name": "New Orleans",
+   "lat": 29.946085,
+   "lon": -90.078291
+  },
+  "NWK": {
+   "name": "Newark",
+   "lat": 40.734706,
+   "lon": -74.16475
+  },
+  "NYP": {
+   "name": "New York",
+   "lat": 40.750327,
+   "lon": -73.994459
+  },
+  "ORL": {
+   "name": "Orlando",
+   "lat": 28.525926,
+   "lon": -81.381516
+  },
+  "PAK": {
+   "name": "Palatka",
+   "lat": 29.649734,
+   "lon": -81.640471
+  },
+  "PHL": {
+   "name": "Philadelphia",
+   "lat": 39.955615,
+   "lon": -75.181041
+  },
+  "PIC": {
+   "name": "Picayune",
+   "lat": 30.524606,
+   "lon": -89.68026
+  },
+  "PTB": {
+   "name": "Petersburg",
+   "lat": 37.241627,
+   "lon": -77.428794
+  },
+  "RGH": {
+   "name": "Raleigh",
+   "lat": 35.777209,
+   "lon": -78.647784
+  },
+  "RMT": {
+   "name": "Rocky Mount",
+   "lat": 35.938001,
+   "lon": -77.797855
+  },
+  "RVR": {
+   "name": "Richmond",
+   "lat": 37.617693,
+   "lon": -77.496943
+  },
+  "SAL": {
+   "name": "Salisbury",
+   "lat": 35.667496,
+   "lon": -80.466323
+  },
+  "SAV": {
+   "name": "Savannah",
+   "lat": 32.083412,
+   "lon": -81.148264
+  },
+  "SBG": {
+   "name": "Sebring",
+   "lat": 27.496632,
+   "lon": -81.434202
+  },
+  "SDL": {
+   "name": "Slidell",
+   "lat": 30.278372,
+   "lon": -89.782565
+  },
+  "SPB": {
+   "name": "Spartanburg",
+   "lat": 34.953736,
+   "lon": -81.936917
+  },
+  "SSM": {
+   "name": "Selma",
+   "lat": 35.532786,
+   "lon": -78.280099
+  },
+  "TCA": {
+   "name": "Toccoa",
+   "lat": 34.578456,
+   "lon": -83.331542
+  },
+  "TCL": {
+   "name": "Tuscaloosa",
+   "lat": 33.193165,
+   "lon": -87.560228
+  },
+  "TRE": {
+   "name": "Trenton",
+   "lat": 40.219011,
+   "lon": -74.75444
+  },
+  "WAS": {
+   "name": "Washington",
+   "lat": 38.896993,
+   "lon": -77.006422
+  },
+  "WIL": {
+   "name": "Wilmington",
+   "lat": 39.737263,
+   "lon": -75.551095
+  },
+  "WLN": {
+   "name": "Wilson",
+   "lat": 35.723135,
+   "lon": -77.908029
+  },
+  "WPB": {
+   "name": "West Palm Beach",
+   "lat": 26.712554,
+   "lon": -80.062184
+  },
+  "WPK": {
+   "name": "Winter Park",
+   "lat": 28.597099,
+   "lon": -81.351993
+  },
+  "WTH": {
+   "name": "Winter Haven",
+   "lat": 28.002146,
+   "lon": -81.734878
+  },
+  "YEM": {
+   "name": "Yemassee",
+   "lat": 32.688286,
+   "lon": -80.846901
+  }
+ },
+ "rail": [
+  {
+   "label": "Amtrak Carolinian",
+   "color": "#1f6feb",
+   "dashed": false,
+   "stops": [
+    "NYP",
+    "NWK",
+    "MET",
+    "TRE",
+    "PHL",
+    "WIL",
+    "BAL",
+    "BWI",
+    "WAS",
+    "ALX",
+    "RVR",
+    "PTB",
+    "RMT",
+    "WLN",
+    "SSM",
+    "RGH",
+    "CYN",
+    "DNC",
+    "BNC",
+    "GRO",
+    "HPT",
+    "SAL",
+    "KAN",
+    "CLT"
+   ],
+   "note": "1 daily round trip, New York – Charlotte. Stops at Kannapolis."
+  },
+  {
+   "label": "Amtrak Piedmont",
+   "color": "#0a9396",
+   "dashed": false,
+   "stops": [
+    "RGH",
+    "CYN",
+    "DNC",
+    "BNC",
+    "GRO",
+    "HPT",
+    "SAL",
+    "KAN",
+    "CLT"
+   ],
+   "note": "4 daily round trips, Raleigh – Charlotte. Stops at Kannapolis."
+  },
+  {
+   "label": "Amtrak Crescent (transfer at Charlotte)",
+   "color": "#d1495b",
+   "dashed": true,
+   "stops": [
+    "CLT",
+    "GAS",
+    "SPB",
+    "GRV",
+    "CSN",
+    "TCA",
+    "GNS",
+    "ATL",
+    "ATN",
+    "BHM",
+    "TCL",
+    "MEI",
+    "LAU",
+    "HBG",
+    "PIC",
+    "SDL",
+    "NOL"
+   ],
+   "note": "1 daily round trip, New Orleans – New York. Transfer at Charlotte."
+  },
+  {
+   "label": "Amtrak Silver Meteor (transfer at Rocky Mount)",
+   "color": "#e09f3e",
+   "dashed": true,
+   "stops": [
+    "RMT",
+    "FAY",
+    "FLO",
+    "KTR",
+    "CHS",
+    "YEM",
+    "SAV",
+    "JSP",
+    "JAX",
+    "PAK",
+    "DLD",
+    "WPK",
+    "ORL",
+    "KIS",
+    "WTH",
+    "SBG",
+    "WPB",
+    "DLB",
+    "DFB",
+    "FTL",
+    "HOL",
+    "MIA"
+   ],
+   "note": "1 daily round trip, Miami – New York. Transfer at Rocky Mount."
+  }
+ ],
+ "airlines": {
+  "Allegiant Air": "#f77f00",
+  "Avelo Airlines": "#7b2cbf"
+ },
+ "flights": [
+  {
+   "airline": "Allegiant Air",
+   "code": "SFB",
+   "note": "Current route",
+   "name": "Orlando Sanford International Airport",
+   "city": "Orlando, FL",
+   "lat": 28.774277,
+   "lon": -81.234626
+  },
+  {
+   "airline": "Allegiant Air",
+   "code": "PIE",
+   "note": "Current route",
+   "name": "St. Petersburg Clearwater International Airport",
+   "city": "Pinellas Park, FL",
+   "lat": 27.9102,
+   "lon": -82.687401
+  },
+  {
+   "airline": "Allegiant Air",
+   "code": "FLL",
+   "note": "Current route",
+   "name": "Fort Lauderdale Hollywood International Airport",
+   "city": "Fort Lauderdale, FL",
+   "lat": 26.072599,
+   "lon": -80.152702
+  },
+  {
+   "airline": "Allegiant Air",
+   "code": "PGD",
+   "note": "Current route",
+   "name": "Punta Gorda Airport",
+   "city": "Punta Gorda, FL",
+   "lat": 26.9202,
+   "lon": -81.990501
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "HVN",
+   "note": "Current route",
+   "name": "Tweed New Haven Airport",
+   "city": "New Haven, CT",
+   "lat": 41.262869,
+   "lon": -72.887694
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "ALB",
+   "note": "Current route",
+   "name": "Albany International Airport",
+   "city": "Albany, NY",
+   "lat": 42.748299,
+   "lon": -73.801697
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "ROC",
+   "note": "Current route",
+   "name": "Frederick Douglass Greater Rochester International Airport",
+   "city": "Rochester, NY",
+   "lat": 43.1189,
+   "lon": -77.672401
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "ISP",
+   "note": "Current route",
+   "name": "Long Island MacArthur Airport",
+   "city": "Islip, NY",
+   "lat": 40.796324,
+   "lon": -73.101703
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "LAL",
+   "note": "Current route",
+   "name": "Lakeland Linder International Airport",
+   "city": "Lakeland, FL",
+   "lat": 27.989267,
+   "lon": -82.020715
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "SJU",
+   "note": "Current route",
+   "name": "Luis Munoz Marin International Airport",
+   "city": "San Juan, PR",
+   "lat": 18.4394,
+   "lon": -66.001801
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "IND",
+   "note": "Current route",
+   "name": "Indianapolis International Airport",
+   "city": "Indianapolis, IN",
+   "lat": 39.7173,
+   "lon": -86.294403
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "CLE",
+   "note": "Current route",
+   "name": "Cleveland Hopkins International Airport",
+   "city": "Cleveland, OH",
+   "lat": 41.411701,
+   "lon": -81.8498
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "MCO",
+   "note": "New Routes (November 2026)",
+   "name": "Orlando International Airport",
+   "city": "Orlando, FL",
+   "lat": 28.429399490356445,
+   "lon": -81.30899810791016
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "TPA",
+   "note": "New Routes (November 2026)",
+   "name": "Tampa International Airport",
+   "city": "Tampa, FL",
+   "lat": 27.9755,
+   "lon": -82.533203
+  },
+  {
+   "airline": "Avelo Airlines",
+   "code": "RSW",
+   "note": "New Routes (November 2026)",
+   "name": "Southwest Florida International Airport",
+   "city": "Fort Myers, FL",
+   "lat": 26.534685,
+   "lon": -81.752816
+  }
+ ],
+ "footer": "Data: Amtrak GTFS 20261123 (fetched 2026-11-24), Concord-Padgett airport route list (fetched 2026-11-24). Verify with Amtrak, Avelo and Allegiant before booking."
+};
+
+const map = L.map('map', { worldCopyJump: true }).setView([33.5, -80], 5);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+document.getElementById('footer').textContent = DATA.footer;
+
+const allBounds = L.latLngBounds([]);
+const ll = code => [DATA.stations[code].lat, DATA.stations[code].lon];
+
+// Curved arc between two points (quadratic Bezier, bowed to one side)
+function arc(a, b, bow = 0.18, n = 48) {
+  const [lat1, lon1] = a, [lat2, lon2] = b;
+  const mx = (lat1 + lat2) / 2, my = (lon1 + lon2) / 2;
+  const dx = lat2 - lat1, dy = lon2 - lon1;
+  const cx = mx - dy * bow, cy = my + dx * bow;   // control point, perpendicular offset
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    pts.push([u*u*lat1 + 2*u*t*cx + t*t*lat2, u*u*lon1 + 2*u*t*cy + t*t*lon2]);
+  }
+  return pts;
+}
+
+// Legend row with a checkbox that shows/hides `layer`
+function addToggleRow(container, label, color, dashed, count, layer) {
+  const row = document.createElement('label');
+  row.className = 'row';
+  row.innerHTML = `<input type="checkbox" checked>
+    <span class="swatch${dashed ? ' dash' : ''}" style="border-top-color:${color}"></span>
+    <span>${label}</span><span class="count">${count}</span>`;
+  row.querySelector('input').addEventListener('change', e => {
+    e.target.checked ? layer.addTo(map) : map.removeLayer(layer);
+  });
+  container.appendChild(row);
+}
+
+// ---- Rail -----------------------------------------------------------------
+const railList = document.getElementById('rail-list');
+DATA.rail.forEach(route => {
+  const group = L.layerGroup();
+  L.polyline(route.stops.map(ll), {
+    color: route.color, weight: 4, opacity: 0.85, dashArray: route.dashed ? '8 8' : null
+  }).bindPopup(`<b>${route.label}</b><br>${route.note}<br><small>${route.stops.length} stops shown</small>`)
+    .addTo(group);
+  route.stops.forEach(s => {
+    allBounds.extend(ll(s));
+    L.circleMarker(ll(s), { radius: 4, color: route.color, fillColor: '#fff', fillOpacity: 1, weight: 2 })
+      .bindTooltip(`${DATA.stations[s].name} (${s}) &mdash; ${route.label}`)
+      .addTo(group);
+  });
+  group.addTo(map);
+  addToggleRow(railList, route.label, route.color, route.dashed, route.stops.length, group);
+});
+
+// ---- Flights --------------------------------------------------------------
+const airList = document.getElementById('air-list');
+const usa = DATA.origins.USA;
+Object.entries(DATA.airlines).forEach(([airline, color], i) => {
+  const group = L.layerGroup();
+  const flights = DATA.flights.filter(f => f.airline === airline);
+  flights.forEach(f => {
+    const dest = [f.lat, f.lon];
+    const popup = `<b>${f.city} (${f.code})</b><br>${f.name}<br>${airline}<br><small>${f.note}</small>`;
+    allBounds.extend(dest);
+    // Bow airlines to opposite sides so overlapping Florida arcs stay distinct
+    L.polyline(arc([usa.lat, usa.lon], dest, i % 2 ? -0.18 : 0.18), { color, weight: 2.5, opacity: 0.9 })
+      .bindPopup(popup).addTo(group);
+    L.circleMarker(dest, { radius: 6, color, fillColor: color, fillOpacity: 0.9, weight: 1 })
+      .bindTooltip(f.code, { permanent: true, direction: 'right', className: 'code' })
+      .bindPopup(popup).addTo(group);
+  });
+  group.addTo(map);
+  addToggleRow(airList, airline, color, false, flights.length, group);
+});
+
+// ---- Origins --------------------------------------------------------------
+Object.entries(DATA.origins).forEach(([code, o]) => {
+  allBounds.extend([o.lat, o.lon]);
+  L.circleMarker([o.lat, o.lon], { radius: 9, color: '#111', fillColor: '#ffd60a', fillOpacity: 1, weight: 2 })
+    .bindTooltip(`<b>${code}</b>`, { permanent: true, direction: code === 'KAN' ? 'top' : 'bottom', className: 'code' })
+    .bindPopup(`<b>${o.name}</b>`)
+    .addTo(map);
+});
+
+map.fitBounds(allBounds, { padding: [30, 30] });
+</script>
+</body>
+</html>
